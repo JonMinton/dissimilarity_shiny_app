@@ -69,7 +69,7 @@ server <- function(input, output, server){
       
       if (!is.null(w) & !is.null(dta)){
         cat("in inner of run_model\n")
-        browser()
+        #browser()
         # remove duplicates 
         w_dz <- rownames(w)
         w <- w[!duplicated(w_dz), !duplicated(w_dz)]
@@ -137,11 +137,11 @@ server <- function(input, output, server){
       cat("server:eventReactive:summarise_posterior_distribution\n")
       bayes <- generate_posterior_distribution()
       classical <- calc_d_classical()$D.boot
-      n_digits <- 4
+      n_digits <- 5
       
       if (!is.null(bayes) & !is.null(classical)){
-        qi_bayes <- bayes %>% quantile(c(0.025, 0.5, 0.975)) %>% round(4)
-        qi_classical <- classical %>% quantile(c(0.025, 0.5, 0.975)) %>% round(4)
+        qi_bayes <- bayes %>% quantile(c(0.025, 0.5, 0.975)) %>% round(n_digits)
+        qi_classical <- classical %>% quantile(c(0.025, 0.5, 0.975)) %>% round(n_digits)
         
         out <- data.frame(
           method=c("Classical", "Bayesian"),
@@ -182,6 +182,12 @@ server <- function(input, output, server){
       out <- NULL
     }
     return(out)
+  })
+  
+  observeEvent(input$save_output, {
+    file_name <- paste0("data_outputs/", input$output_file_name, ".csv")
+    data <- generate_posterior_distribution()
+    write.csv(data, file_name)
   })
   
   load_data <- reactive({
@@ -229,6 +235,20 @@ server <- function(input, output, server){
       }  
       return(out)
     })
+  
+  get_new_plot_params <- eventReactive(
+    input$redo_plot, 
+    
+    {
+      out <- list(
+        binwidth = 10^ input$binwidth,
+        thresholds = input$seg_k,
+        graph_limits = input$graph_limit
+      )
+      return(out)
+    }
+  )
+  
   
   combine_input_table <- eventReactive(
     input$ok_num_denom,
@@ -449,23 +469,28 @@ server <- function(input, output, server){
     samples <- generate_posterior_distribution() 
     
     if (!is.null(samples)){
+      graph_params <- get_new_plot_params()
+      selected_binwidth <- graph_params$binwidth
+      selected_limits <- graph_params$graph_limits
+      
       samples <- data.frame(value=samples)
-      thresholds <- input$seg_k
+      thresholds <- graph_params$thresholds
+      
       samples$filled <- "yes"
       samples$filled[samples$value <= thresholds[1] | samples$value >= thresholds[2]] <- "no"
       prop_in_band <- length(samples$filled[samples$filled=="yes"])/length(samples$filled) %>%
-        round(., 2)
+        round(., 3)
       
       out <- samples %>% 
         ggplot(data=., aes(x=value, fill=filled)) + 
-        geom_histogram(bindwidth = 0.001) +
+        geom_histogram(binwidth = selected_binwidth) +
         scale_fill_manual(values=c("yes"="black", "no"= "lightgray"), guide=FALSE) +
         geom_vline(
           xintercept=thresholds,
           linetype="dotted",
           linewidth=2.5
         ) + 
-        coord_cartesian(xlim=c(0,1)) +
+        coord_cartesian(xlim=selected_limits) +
         annotate("text", x=mean(thresholds), y=-1.5, col="red", fontface="bold", label=prop_in_band)
       
     } else {out <- NULL}
@@ -498,7 +523,7 @@ server <- function(input, output, server){
     samples <- generate_posterior_distribution()
     
     p_in_t <- length(samples[between(samples, thresholds[1], thresholds[2])]) / length(samples)
-    p_in_t <- round(p_in_t, 2)
+    p_in_t <- round(p_in_t, 3)
     
     
     out_02 <- paste("The probability that the true value is within the threshold selected is", p_in_t)
@@ -553,7 +578,8 @@ ui <- fluidPage(
       cat("ui:uiOutput:numerator\n"), uiOutput("numerator"),
       cat("ui:uiOutput:denominator\n"), uiOutput("denominator"),
       # confirm selection button
-      cat("ui:actionButton:ok_num_demon\n"), actionButton("ok_num_denom", "compile selection"),
+      cat("ui:actionButton:ok_num_demon\n"), 
+      actionButton("ok_num_denom", "compile selection"),
       br(),
       
       # load shapefile and generate W matrix
@@ -599,42 +625,44 @@ ui <- fluidPage(
             
       br(),
       cat("ui:actionButton:generate_posterior_button\n"), 
-      actionButton("generate_posterior_button", "click to run model"),
+      actionButton("generate_posterior_button", "click to run model")
       
-      br(),
-      cat("ui:sliderInput:seg_k\n"), 
-      sliderInput(
-        "seg_k", 
-        "Choose segregation thresholds",
-        min=0, max=1, value=c(0,1)
-      )
     ),
     
     mainPanel(
-      h1("Checks"),
-      p(
-        "This secton shows some outputs that allow you to see whether the ",
-        "prerequisites required by the model have been loaded successfully"
-      ),
-      cat("ui:htmlOutput:all_checks\n"), htmlOutput("all_checks"),
-      
-      p("The first few rows of the selected data are shown below"),
-      cat("ui:tableOutput:show_combined_input_table\n"), tableOutput("show_combined_input_table"),
-      br(),
-      
-      #########################################################################
-      hr(),
-      h1("Analysis"),
-      p("This section will present results from the model run"),
-      p("Once the model has been run a figure will be generated"),
-      p("Along with other summary statistics"),
-      
-      cat("ui:textOutput:model_report\n"), htmlOutput("model_report"),
-      h2("show plot"),
-      cat("ui:plotOutput:show_posterior_distribution\n"), plotOutput("show_posterior_distribution"),
-      cat("ui:tableOutput:tabulate_posterior\n"), tableOutput("tabulate_posterior")
-      
+      tabsetPanel(
+        tabPanel("Data Checks", htmlOutput("all_checks")),
+        tabPanel("Graph", 
+                 htmlOutput("model_report"),
+                 plotOutput("show_posterior_distribution"),
+                 sliderInput(
+                   "binwidth", "Choose binwidth",
+                   min = -8, max = 5, value = -2, step = 0.1
+                 ),
+                 sliderInput(
+                   "seg_k", 
+                   "Choose segregation thresholds",
+                   min=0, max=1, value=c(0,1)
+                 ),
+                 sliderInput(
+                   "graph_limit",
+                   "Select graph limits",
+                   min = 0, max = 1, value = c(0, 1)
+                 ),
+                 actionButton("redo_plot", "Redo Plot"),
+                 br(),
+                 tableOutput("tabulate_posterior")
+        ),
+        tabPanel("Save Results",
+                 p("Please provide a file name then click save to save posterior samples"), 
+                 textInput("output_file_name", "Write file name here"),
+                 p("then press the button below to save to the output directory"),
+                 actionButton("save_output", "Click to save output")
+
+                 )
+      )
     )
+
   )
 )
 
