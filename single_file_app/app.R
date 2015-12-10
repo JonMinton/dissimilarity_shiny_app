@@ -631,6 +631,10 @@ ui <- fluidPage(
     
     mainPanel(
       tabsetPanel(
+        tabPanel("Data Inputs", 
+                 fileInput("shapefile_input", "Please select the shapefile to use"),
+                 fileInput("attribute_input", "Please select attribute dataset file" )
+                 ),
         tabPanel("Data Checks", htmlOutput("all_checks")),
         tabPanel("Graph", 
                  htmlOutput("model_report"),
@@ -658,7 +662,6 @@ ui <- fluidPage(
                  textInput("output_file_name", "Write file name here"),
                  p("then press the button below to save to the output directory"),
                  actionButton("save_output", "Click to save output")
-
                  )
       )
     )
