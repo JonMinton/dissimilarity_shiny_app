@@ -9,29 +9,23 @@
 
 # server - load prerequisities --------------------------------------------
 
-
-require(spdep)
-require(maptools)
-require(CARBayes)
-require(Rcpp)
-require(MASS)
-
-require(stringr)
-require(plyr)
-require(tidyr)
-require(dplyr)
-
-
-require(grid)
-require(ggplot2)
-
-require(shiny)
-
-
-
-
-
 # Server - load scripts  --------------------------------------------------
+
+setwd(base_dir_location)
+source("scripts/LoadPackages.R")
+
+# Load prerequisite packages (install if not already installed)
+
+RequiredPackages(
+  required = c(
+    "spdep", "maptools", 
+    "CARBayes","Rcpp", "MASS", 
+    "stringr", "plyr", "tidyr", "dplyr",
+    "grid", "ggplot2",
+    "shiny"
+  )
+)              
+
 source("scripts/D_compute.r")
 sourceCpp("scripts/cppfunctions.cpp")
 # 
@@ -187,7 +181,7 @@ server <- function(input, output, server){
   observeEvent(input$save_output, {
     file_name <- paste0("data_outputs/", input$output_file_name, ".csv")
     data <- generate_posterior_distribution()
-    write.csv(data, file_name)
+    write.csv(data, file_name, row.names = F)
   })
   
   load_data <- reactive({
